@@ -1,43 +1,72 @@
 import express from "express"
 import mongoose from "mongoose"
-import CentralModal from "./modal/CentralModal";
-import TodoModal from "./modal/TodoModal";
-import checkDatabaseExist from "./database/checkDatabaseExist";
+// import CentralSchema from "./modal/CentralModal.js";
+import TodoSchema from "./modal/TodoModal.js";
+import checkDatabaseExist from "./database/checkDatabaseExist.js";
 
 const app = express();
 
 app.use(express.urlencoded({extended: true}))
 app.use(express.json())
 
-const central = new CentralModal;
-const todo = new TodoModal;
 
 app.post("/new_organization", async (req, res) => {
-    const {organization_name} = req.body
-    //create a new database for tenants
-    mongoose.connect(`mongoodb://127.0.0.1:27017/centralDB`).then(async () => {
-       const org = await central({_id: `${organization_name}1`, name: `${organization_name}`})
-        res.send(org)
-    }).catch((e) => {
-        console.log(e.message)
-    })
-    res.send(`Organization ${organization_name} created`)
-})
+    const { organization_name } = req.body;
+
+    try {
+        const centralConnection = await mongoose.createConnection(
+            "mongodb://127.0.0.1:27017/centralDB"
+        );
+        const CentralModel = centralConnection.model("CentralDB", new mongoose.Schema({
+            name: String, // Define fields for central DB schema
+        }));
+        await CentralModel.create({ name: organization_name });
+        await centralConnection.close();
+        const tenantConnection = await mongoose.createConnection(
+            `mongodb://127.0.0.1:27017/${organization_name}`
+        );
+        const TenantModel = tenantConnection.model("Todo", TodoSchema);
+        await TenantModel.createCollection();
+        await tenantConnection.close();
+        res.send(`Organization ${organization_name} created successfully.`);
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).send("An error occurred while creating the organization.");
+    }
+});
+
 
 app.post("/todo", async (req, res) => {
-    const host = req.header.host
-    const data = req.body
-    if(!checkDatabaseExist(host)){
-        res.send("Tenant not found")
-        return
+    const host = req.hostname.split(".")[0];
+    const data = req.body;
+    try {
+        // Use createConnection to avoid global Mongoose connection conflicts
+        const tenantConnection = await mongoose.createConnection(`mongodb://127.0.0.1:27017/${host}`);
+        const TodoModel = tenantConnection.model("Todo", TodoSchema);
+
+        await TodoModel.create(data);
+        res.send("Todo created successfully");
+        await tenantConnection.close(); // Close tenant connection
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).send("Internal server error");
     }
-    mongoose.conect(`mongodb://127.0.0.1:27017/${host}`).then(async () => {
-       const Todo = await todo(data) 
-        res.send(Todo)
-    }).catch((e) => {
-        console.log(e.message)
-    })
-})
+});
+app.patch("/todo", async (req, res) => {
+    const host = req.hostname.split(".")[0];
+    const data = req.body;
+    try {
+        // Use createConnection to avoid global Mongoose connection conflicts
+        const tenantConnection = await mongoose.createConnection(`mongodb://127.0.0.1:27017/${host}`);
+        const TodoModel = tenantConnection.model("Todo", TodoSchema);
+
+        await TodoModel.updateOne(data).where({title: data.title});
+        res.send("Todo updated successfully");
+        await tenantConnection.close(); // Close tenant connection
+    } catch (error) {
+        res.status(500).send("Internal server error");
+    }
+});
 
 app.listen(2000, () => {
     console.log("App is running on port 2000")

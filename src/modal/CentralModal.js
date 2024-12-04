@@ -1,8 +1,7 @@
 import mongoose from "mongoose"    
 
-const centralModal = new mongoose.Schema({
-    _id: String,
+const CentralSchema = new mongoose.Schema({
     name: String
 })
 
-export default mongoose.Model("CentralModal", centralModal)
+export default CentralSchema

@@ -5,4 +5,4 @@ const TodoSchema = new mongoose.Schema({
     desc: String
 })
 
-export default mongoose.Model("TodoModal", TodoSchema)
+export default TodoSchema
